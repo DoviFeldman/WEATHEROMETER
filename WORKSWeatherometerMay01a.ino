@@ -13,11 +13,12 @@ Servo iconServo;
 // Pin definitions
 const int tempServoPin = 13;
 const int iconServoPin = 14;
+const int ledPin = 2;  // Built-in LED, active low
 
 // Wi-Fi and configuration
 String staSSID = "";
 String staPassword = "";
-String city = "";
+String zipcode = "";
 bool configured = false;
 
 // Weather data
@@ -35,7 +36,7 @@ const int iconAngles[] = {90, 72, 54, 36, 18, 0};
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);  // Give Serial time to initialize
+  delay(1000);  // Allow Serial to initialize
   Serial.println("Setup started");
 
   // Attach servos
@@ -46,66 +47,78 @@ void setup() {
   preferences.begin("weather", false);
   staSSID = preferences.getString("ssid", "");
   staPassword = preferences.getString("password", "");
-  city = preferences.getString("city", "");
+  zipcode = preferences.getString("zipcode", "");
 
-  // Start in AP mode for configuration
-  startConfigMode();
-
-  // Wait for configuration
-  while (!configured) {
-    server.handleClient();
-    delay(10);  // Prevent watchdog timeout
+  // Start in AP mode if not configured
+  if (staSSID == "" || staPassword == "" || zipcode == "") {
+    startConfigMode();
+    while (!configured) {
+      server.handleClient();
+      delay(10);  // Prevent watchdog timeout
+    }
+    server.close();  // Stop AP server after configuration
   }
 
-  // Connect to Wi-Fi
+  // Connect to home Wi-Fi
   connectToWiFi();
 
-  // Fetch weather data
-  fetchWeatherData();
-
-  // Move servos with a delay to manage current
-  moveServos(currentTemp, currentIcon);
+  if (WiFi.status() == WL_CONNECTED) {
+    startHomeServer();  // Start weather station server
+    fetchWeatherData(); // Fetch initial weather data
+    moveServos(currentTemp, currentIcon); // Update servos
+  } else {
+    Serial.println("Failed to connect to Wi-Fi. Restarting in AP mode...");
+    ESP.restart();  // Restart to reconfigure if connection fails
+  }
 }
 
 void loop() {
-  // Empty for this test
+  if (WiFi.status() == WL_CONNECTED) {
+    server.handleClient();  // Serve weather station page
+  }
+  delay(10);
 }
 
 void startConfigMode() {
   Serial.println("Starting AP mode");
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ESP32_Config");
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);  // LED on in AP mode
+
   server.on("/", HTTP_GET, []() {
     String html = "<html><body><h1>Configure Wi-Fi and Location</h1>"
                   "<form action='/setWiFi' method='post'>"
                   "SSID: <input type='text' name='ssid'><br>"
                   "Password: <input type='password' name='password'><br>"
-                  "City: <input type='text' name='city'><br>"
+                  "Zip Code: <input type='text' name='zipcode'><br>"
                   "<input type='submit' value='Save'>"
                   "</form></body></html>";
     server.send(200, "text/html", html);
   });
+
   server.on("/setWiFi", HTTP_POST, []() {
-    if (server.hasArg("ssid") && server.hasArg("password") && server.hasArg("city")) {
+    if (server.hasArg("ssid") && server.hasArg("password") && server.hasArg("zipcode")) {
       staSSID = server.arg("ssid");
       staPassword = server.arg("password");
-      city = server.arg("city");
+      zipcode = server.arg("zipcode");
       preferences.putString("ssid", staSSID);
       preferences.putString("password", staPassword);
-      preferences.putString("city", city);
+      preferences.putString("zipcode", zipcode);
       configured = true;
       Serial.println("Configuration saved");
-      server.send(200, "text/plain", "Configuration saved");
+      server.send(200, "text/plain", "Configuration saved. Connecting to Wi-Fi...");
     } else {
       server.send(400, "text/plain", "Bad Request");
     }
   });
+
   server.begin();
-  Serial.println("Web server started");
+  Serial.println("AP server started");
 }
 
 void connectToWiFi() {
-  Serial.println("Connecting to Wi-Fi");
+  Serial.println("Connecting to Wi-Fi: " + staSSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(staSSID.c_str(), staPassword.c_str());
   unsigned long startTime = millis();
@@ -113,16 +126,49 @@ void connectToWiFi() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? "Connected" : "Failed to connect");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to Wi-Fi");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());  // Print IP to access weather page
+    digitalWrite(ledPin, HIGH);  // LED off when connected
+  } else {
+    Serial.println("\nConnection failed");
+  }
+}
+
+void startHomeServer() {
+  server.on("/", HTTP_GET, []() {
+    String html = "<html><body><h1>Weather Station</h1>"
+                  "<p>Current Zip Code: " + zipcode + "</p>"
+                  "<p>Current Temperature: " + String(currentTemp) + "°F</p>"
+                  "<p>Forecast: " + currentIcon + "</p>"
+                  "<form action='/setzip' method='get'>"
+                  "New Zip Code: <input type='text' name='zip'><br>"
+                  "<input type='submit' value='Update'>"
+                  "</form></body></html>";
+    server.send(200, "text/html", html);
+  });
+
+  server.on("/setzip", HTTP_GET, []() {
+    if (server.hasArg("zip")) {
+      zipcode = server.arg("zip");
+      preferences.putString("zipcode", zipcode);
+      fetchWeatherData();
+      moveServos(currentTemp, currentIcon);
+      server.send(200, "text/plain", "Zip code updated to " + zipcode);
+    } else {
+      server.send(400, "text/plain", "Bad Request");
+    }
+  });
+
+  server.begin();
+  Serial.println("Home Wi-Fi server started");
 }
 
 void fetchWeatherData() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Wi-Fi not connected, skipping weather fetch");
-    return;
-  }
+  if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
-  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + city + "&count=1&format=json";
+  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + zipcode + "&count=1&format=json";
   http.begin(geoUrl);
   int httpCode = http.GET();
   if (httpCode != 200) {
@@ -136,7 +182,7 @@ void fetchWeatherData() {
   DynamicJsonDocument doc(1024);
   deserializeJson(doc, payload);
   if (!doc["results"][0]) {
-    Serial.println("Invalid city or no results");
+    Serial.println("Invalid zip code");
     return;
   }
   float lat = doc["results"][0]["latitude"];
@@ -154,10 +200,6 @@ void fetchWeatherData() {
   http.end();
 
   deserializeJson(doc, payload);
-  if (!doc["daily"]) {
-    Serial.println("No daily weather data");
-    return;
-  }
   float maxTemp = doc["daily"]["temperature_2m_max"][0];
   int weatherCode = doc["daily"]["weathercode"][0];
   currentTemp = round(maxTemp);
@@ -171,18 +213,9 @@ void fetchWeatherData() {
 void moveServos(int temp, String icon) {
   int tempAngle = mapTempToAngle(temp);
   int iconAngle = mapIconToAngle(icon);
-  
-  // Move temperature servo first
   tempServo.write(tempAngle);
-  delay(500);  // Wait 500ms to reduce simultaneous current draw
-  
-  // Then move icon servo
+  delay(500);  // Reduce current draw
   iconServo.write(iconAngle);
-  
-  Serial.print("Servos moved - Temp angle: ");
-  Serial.print(tempAngle);
-  Serial.print(", Icon angle: ");
-  Serial.println(iconAngle);
 }
 
 String mapWeatherCodeToIcon(int code) {
