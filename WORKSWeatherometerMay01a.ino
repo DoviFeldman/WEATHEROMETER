@@ -3,6 +3,7 @@
 #include <ESP32Servo.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>  // Added for NTP time functions
 
 // Creating pointers to allow recreation of the server
 WebServer* server = NULL;
@@ -24,6 +25,11 @@ bool configured = false;
 int currentTemp = 0;
 String currentIcon = "";
 
+// Time variables for scheduling
+static int utc_offset_seconds = 0;     // Offset from UTC in seconds
+static int last_fetch_yday = -1;       // Day of the year of last fetch
+static int last_fetch_year = -1;       // Year of last fetch
+
 // Temperature to angle mapping
 const int tempPoints[] = {15, 32, 45, 55, 65, 75, 85, 95};
 const int anglePoints[] = {0, 15, 45, 57, 69, 81, 93, 105};
@@ -32,7 +38,6 @@ const int numPoints = 8;
 // Icon to angle mapping
 const String icons[] = {"Sunny", "Partially Cloudy", "Very Cloudy", "Raining", "Thunderstorm", "Snow"};
 const int iconAngles[] = {90, 72, 54, 36, 18, 0};
-
 
 void setup() {
   Serial.begin(115200);
@@ -59,8 +64,23 @@ void setup() {
   // Connect to Wi-Fi (this shuts off the AP by setting WIFI_STA)
   connectToWiFi();
 
-  // If connected, fetch IP and start new AP with "GoTo-<IP>"
   if (WiFi.status() == WL_CONNECTED) {
+    // Set up NTP to get UTC time
+    configTime(0, 0, "pool.ntp.org");
+    Serial.println("Waiting for NTP time sync");
+    time_t now = time(nullptr);
+    while (now < 1000000000) {  // Wait until time is set
+      delay(1000);
+      Serial.print(".");
+      now = time(nullptr);
+    }
+    Serial.println("\nTime synchronized");
+
+    // Fetch initial weather data and set UTC offset
+    fetchWeatherData();
+    moveServos(currentTemp, currentIcon);
+
+    // If connected, fetch IP and start new AP with "GoTo-<IP>"
     String ipStr = WiFi.localIP().toString();
     String apName = "GoTo-" + ipStr;
     WiFi.mode(WIFI_AP_STA);  // Enable both station and AP modes
@@ -68,32 +88,32 @@ void setup() {
     Serial.println("Started AP: " + apName);
   }
 
-  digitalWrite(ledPin, LOW);  // LED off when connected to home Wi-Fi
-
-  // Fetch initial weather data
-  fetchWeatherData();
-  moveServos(currentTemp, currentIcon);
+  digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi
 
   // Delete and recreate the server for weather mode
   delete server;
   server = new WebServer(80);
-  
+
   // Set up new routes for the weather server
   setupWeatherServer();
-  
+
   Serial.println("Weather server started");
 }
 
-
 void loop() {
   server->handleClient();  // Handle requests from the weather web server
-  
-  // Optional: Periodically update weather data (e.g., every hour)
-  static unsigned long lastUpdate = 0;
-  if (millis() - lastUpdate > 3600000) {  // 1 hour
+
+  // Check time and fetch weather at 2 AM local time
+  time_t now = time(nullptr);
+  time_t local_now = now + utc_offset_seconds;
+  struct tm *local_tm = gmtime(&local_now);  // Interpret as local time due to offset
+
+  if (local_tm->tm_hour >= 2 && 
+      (local_tm->tm_yday != last_fetch_yday || local_tm->tm_year != last_fetch_year)) {
     fetchWeatherData();
     moveServos(currentTemp, currentIcon);
-    lastUpdate = millis();
+    last_fetch_yday = local_tm->tm_yday;
+    last_fetch_year = local_tm->tm_year;
   }
 }
 
@@ -251,6 +271,10 @@ void fetchWeatherData() {
   int weatherCode = doc["daily"]["weathercode"][0];
   currentTemp = round(maxTemp);
   currentIcon = mapWeatherCodeToIcon(weatherCode);
+  
+  // Extract UTC offset for local time calculation
+  utc_offset_seconds = doc["utc_offset_seconds"].as<int>();
+
   Serial.print("Temp: ");
   Serial.print(currentTemp);
   Serial.print("°F, Icon: ");
