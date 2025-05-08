@@ -3,22 +3,24 @@
 #include <ESP32Servo.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
+// CLAUDE FIXED IT!!!!! THIS ONE FULLY WORKS!!
+// RESTARTS WHEN I POWER OFF AND ON, WEBSITE GOES TO THE RIGHT ONE, NO SAVED PREFERENCES, BLUE LED TURNS ON WHEN ITS SUPPOSED TO, SERVOS MOVE, WEBSITE UPDATES!!!!!
+// if this breaks again and i cant fix it then i can just make one website server and delete all the other problems, but it seemed that Claude fixed it. 
 
-WebServer server(80);
-Preferences preferences;
+// Creating pointers to allow recreation of the server
+WebServer* server = NULL;
 Servo tempServo;
 Servo iconServo;
 
 // Pin definitions
 const int tempServoPin = 13;
 const int iconServoPin = 14;
-const int ledPin = 2;  // Built-in LED, active low
+const int ledPin = 2;  // Assuming built-in blue LED is on pin 2
 
 // Wi-Fi and configuration
 String staSSID = "";
 String staPassword = "";
-String zipcode = "";
+String zipCode = "";
 bool configured = false;
 
 // Weather data
@@ -36,89 +38,104 @@ const int iconAngles[] = {90, 72, 54, 36, 18, 0};
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);  // Allow Serial to initialize
+  delay(1000);  // Give Serial time to initialize
   Serial.println("Setup started");
 
   // Attach servos
   tempServo.attach(tempServoPin);
   iconServo.attach(iconServoPin);
 
-  // Initialize preferences
-  preferences.begin("weather", false);
-  staSSID = preferences.getString("ssid", "");
-  staPassword = preferences.getString("password", "");
-  zipcode = preferences.getString("zipcode", "");
+  // Initialize LED
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);  // LED on in AP mode
 
-  // Start in AP mode if not configured
-  if (staSSID == "" || staPassword == "" || zipcode == "") {
-    startConfigMode();
-    while (!configured) {
-      server.handleClient();
-      delay(10);  // Prevent watchdog timeout
-    }
-    server.close();  // Stop AP server after configuration
+  // Start in AP mode for configuration
+  startConfigMode();
+
+  // Wait for configuration
+  while (!configured) {
+    server->handleClient();
+    delay(10);  // Prevent watchdog timeout
   }
 
-  // Connect to home Wi-Fi
+  // Connect to Wi-Fi
   connectToWiFi();
+  digitalWrite(ledPin, LOW);  // LED off when connected to home Wi-Fi
 
-  if (WiFi.status() == WL_CONNECTED) {
-    startHomeServer();  // Start weather station server
-    fetchWeatherData(); // Fetch initial weather data
-    moveServos(currentTemp, currentIcon); // Update servos
-  } else {
-    Serial.println("Failed to connect to Wi-Fi. Restarting in AP mode...");
-    ESP.restart();  // Restart to reconfigure if connection fails
-  }
+  // Fetch initial weather data
+  fetchWeatherData();
+  moveServos(currentTemp, currentIcon);
+
+  // Delete and recreate the server for weather mode
+  delete server;
+  server = new WebServer(80);
+  
+  // Set up new routes for the weather server
+  setupWeatherServer();
+  
+  Serial.println("Weather server started");
 }
 
 void loop() {
-  if (WiFi.status() == WL_CONNECTED) {
-    server.handleClient();  // Serve weather station page
+  server->handleClient();  // Handle requests from the weather web server
+  
+  // Optional: Periodically update weather data (e.g., every hour)
+  static unsigned long lastUpdate = 0;
+  if (millis() - lastUpdate > 3600000) {  // 1 hour
+    fetchWeatherData();
+    moveServos(currentTemp, currentIcon);
+    lastUpdate = millis();
   }
-  delay(10);
+}
+
+void setupWeatherServer() {
+  // Set up new routes for weather server (server has been recreated)
+  server->on("/", HTTP_GET, handleWeatherPage);
+  server->on("/setZip", HTTP_POST, handleSetZip);
+  server->begin();
+  Serial.print("Weather server started on IP: ");
+  Serial.println(WiFi.localIP());
 }
 
 void startConfigMode() {
   Serial.println("Starting AP mode");
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("ESP32_Config");
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);  // LED on in AP mode
-
-  server.on("/", HTTP_GET, []() {
-    String html = "<html><body><h1>Configure Wi-Fi and Location</h1>"
+  WiFi.softAP("WEATHEROMETER");  // Open AP with no password
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.softAPIP());
+  
+  // Create a new server instance for config mode
+  server = new WebServer(80);
+  
+  server->on("/", HTTP_GET, []() {
+    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body>"
+                  "<h1>Configure Wi-Fi and Location</h1>"
                   "<form action='/setWiFi' method='post'>"
                   "SSID: <input type='text' name='ssid'><br>"
                   "Password: <input type='password' name='password'><br>"
                   "Zip Code: <input type='text' name='zipcode'><br>"
                   "<input type='submit' value='Save'>"
                   "</form></body></html>";
-    server.send(200, "text/html", html);
+    server->send(200, "text/html", html);
   });
-
-  server.on("/setWiFi", HTTP_POST, []() {
-    if (server.hasArg("ssid") && server.hasArg("password") && server.hasArg("zipcode")) {
-      staSSID = server.arg("ssid");
-      staPassword = server.arg("password");
-      zipcode = server.arg("zipcode");
-      preferences.putString("ssid", staSSID);
-      preferences.putString("password", staPassword);
-      preferences.putString("zipcode", zipcode);
+  server->on("/setWiFi", HTTP_POST, []() {
+    if (server->hasArg("ssid") && server->hasArg("password") && server->hasArg("zipcode")) {
+      staSSID = server->arg("ssid");
+      staPassword = server->arg("password");
+      zipCode = server->arg("zipcode");
       configured = true;
-      Serial.println("Configuration saved");
-      server.send(200, "text/plain", "Configuration saved. Connecting to Wi-Fi...");
+      Serial.println("Configuration set");
+      server->send(200, "text/html", "Configuration saved. Connecting to Wi-Fi...");
     } else {
-      server.send(400, "text/plain", "Bad Request");
+      server->send(400, "text/plain", "Bad Request");
     }
   });
-
-  server.begin();
-  Serial.println("AP server started");
+  server->begin();
+  Serial.println("Config web server started");
 }
 
 void connectToWiFi() {
-  Serial.println("Connecting to Wi-Fi: " + staSSID);
+  Serial.println("Connecting to Wi-Fi");
   WiFi.mode(WIFI_STA);
   WiFi.begin(staSSID.c_str(), staPassword.c_str());
   unsigned long startTime = millis();
@@ -127,52 +144,26 @@ void connectToWiFi() {
     Serial.print(".");
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected to Wi-Fi");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());  // Print IP to access weather page
-    digitalWrite(ledPin, HIGH);  // LED off when connected
+    Serial.println("Connected to WiFi");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\nConnection failed");
+    Serial.println("Failed to connect to WiFi");
+    // Could add fallback to AP mode here if needed
   }
 }
 
-void startHomeServer() {
-  server.on("/", HTTP_GET, []() {
-    String html = "<html><body><h1>Weather Station</h1>"
-                  "<p>Current Zip Code: " + zipcode + "</p>"
-                  "<p>Current Temperature: " + String(currentTemp) + "°F</p>"
-                  "<p>Forecast: " + currentIcon + "</p>"
-                  "<form action='/setzip' method='get'>"
-                  "New Zip Code: <input type='text' name='zip'><br>"
-                  "<input type='submit' value='Update'>"
-                  "</form></body></html>";
-    server.send(200, "text/html", html);
-  });
-
-  server.on("/setzip", HTTP_GET, []() {
-    if (server.hasArg("zip")) {
-      zipcode = server.arg("zip");
-      preferences.putString("zipcode", zipcode);
-      fetchWeatherData();
-      moveServos(currentTemp, currentIcon);
-      server.send(200, "text/plain", "Zip code updated to " + zipcode);
-    } else {
-      server.send(400, "text/plain", "Bad Request");
-    }
-  });
-
-  server.begin();
-  Serial.println("Home Wi-Fi server started");
-}
-
 void fetchWeatherData() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Wi-Fi not connected, skipping weather fetch");
+    return;
+  }
   HTTPClient http;
-  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + zipcode + "&count=1&format=json";
+  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + zipCode + "&count=1&format=json";
   http.begin(geoUrl);
   int httpCode = http.GET();
   if (httpCode != 200) {
-    Serial.println("Geocoding failed");
+    Serial.println("Geocoding failed with code: " + String(httpCode));
     http.end();
     return;
   }
@@ -182,7 +173,7 @@ void fetchWeatherData() {
   DynamicJsonDocument doc(1024);
   deserializeJson(doc, payload);
   if (!doc["results"][0]) {
-    Serial.println("Invalid zip code");
+    Serial.println("Invalid zip code or no results");
     return;
   }
   float lat = doc["results"][0]["latitude"];
@@ -192,7 +183,7 @@ void fetchWeatherData() {
   http.begin(weatherUrl);
   httpCode = http.GET();
   if (httpCode != 200) {
-    Serial.println("Weather fetch failed");
+    Serial.println("Weather fetch failed with code: " + String(httpCode));
     http.end();
     return;
   }
@@ -200,22 +191,57 @@ void fetchWeatherData() {
   http.end();
 
   deserializeJson(doc, payload);
+  if (!doc["daily"]) {
+    Serial.println("No daily weather data");
+    return;
+  }
   float maxTemp = doc["daily"]["temperature_2m_max"][0];
   int weatherCode = doc["daily"]["weathercode"][0];
   currentTemp = round(maxTemp);
   currentIcon = mapWeatherCodeToIcon(weatherCode);
   Serial.print("Temp: ");
   Serial.print(currentTemp);
-  Serial.print(", Icon: ");
+  Serial.print("°F, Icon: ");
   Serial.println(currentIcon);
 }
 
 void moveServos(int temp, String icon) {
   int tempAngle = mapTempToAngle(temp);
   int iconAngle = mapIconToAngle(icon);
+  
   tempServo.write(tempAngle);
-  delay(500);  // Reduce current draw
+  delay(500);  // Wait to reduce current draw
   iconServo.write(iconAngle);
+  
+  Serial.print("Servos moved - Temp angle: ");
+  Serial.print(tempAngle);
+  Serial.print(", Icon angle: ");
+  Serial.println(iconAngle);
+}
+
+void handleWeatherPage() {
+  String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+                "<title>Weatherometer</title></head><body>"
+                "<h1>Weatherometer</h1>"
+                "<p>Current Zip Code: " + zipCode + "</p>"
+                "<p>Temperature: " + String(currentTemp) + "°F</p>"
+                "<p>Forecast: " + currentIcon + "</p>"
+                "<form action='/setZip' method='post'>"
+                "New Zip Code: <input type='text' name='zipcode'><br>"
+                "<input type='submit' value='Update'>"
+                "</form></body></html>";
+  server->send(200, "text/html", html);
+}
+
+void handleSetZip() {
+  if (server->hasArg("zipcode")) {
+    zipCode = server->arg("zipcode");
+    fetchWeatherData();
+    moveServos(currentTemp, currentIcon);
+    server->send(200, "text/html", "Zip code updated. <a href='/'>Go back</a>");
+  } else {
+    server->send(400, "text/plain", "Bad Request");
+  }
 }
 
 String mapWeatherCodeToIcon(int code) {
