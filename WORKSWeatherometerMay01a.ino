@@ -3,9 +3,6 @@
 #include <ESP32Servo.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-// CLAUDE FIXED IT!!!!! THIS ONE FULLY WORKS!!
-// RESTARTS WHEN I POWER OFF AND ON, WEBSITE GOES TO THE RIGHT ONE, NO SAVED PREFERENCES, BLUE LED TURNS ON WHEN ITS SUPPOSED TO, SERVOS MOVE, WEBSITE UPDATES!!!!!
-// if this breaks again and i cant fix it then i can just make one website server and delete all the other problems, but it seemed that Claude fixed it. 
 
 // Creating pointers to allow recreation of the server
 WebServer* server = NULL;
@@ -92,6 +89,7 @@ void setupWeatherServer() {
   // Set up new routes for weather server (server has been recreated)
   server->on("/", HTTP_GET, handleWeatherPage);
   server->on("/setZip", HTTP_POST, handleSetZip);
+  server->on("/setup", HTTP_GET, handleSetup);  // Add setup route
   server->begin();
   Serial.print("Weather server started on IP: ");
   Serial.println(WiFi.localIP());
@@ -115,7 +113,11 @@ void startConfigMode() {
                   "Password: <input type='password' name='password'><br>"
                   "Zip Code: <input type='text' name='zipcode'><br>"
                   "<input type='submit' value='Save'>"
-                  "</form></body></html>";
+                  "</form>"
+                  "<div style='text-align: center; margin-top: 20px;'>"
+                  "<a href='/setup?step=0'><button>Setup Sequence</button></a>"
+                  "</div>"
+                  "</body></html>";
     server->send(200, "text/html", html);
   });
   server->on("/setWiFi", HTTP_POST, []() {
@@ -130,8 +132,47 @@ void startConfigMode() {
       server->send(400, "text/plain", "Bad Request");
     }
   });
+  server->on("/setup", HTTP_GET, handleSetup);  // Add setup route
   server->begin();
   Serial.println("Config web server started");
+}
+
+void handleSetup() {
+  String stepStr = server->arg("step");
+  int step = stepStr.toInt();
+  if (stepStr == "" || step < 0 || step > 13) step = 0;
+
+  String instruction;
+  if (step < 8) {
+    int tempIndex = 7 - step;
+    int tempAngle = anglePoints[tempIndex];
+    tempServo.write(tempAngle);
+    instruction = "Place " + String(tempPoints[tempIndex]) + " by the right servo motor";
+  } else {
+    int iconIndex = step - 8;
+    int iconAngle = iconAngles[iconIndex];
+    iconServo.write(iconAngle);
+    instruction = "Place " + icons[iconIndex] + " by the left servo motor";
+  }
+
+  String nextLink;
+  String buttonText;
+  if (step < 13) {
+    nextLink = "/setup?step=" + String(step + 1);
+    buttonText = "Next";
+  } else {
+    nextLink = "/";
+    buttonText = "Finish";
+  }
+
+  String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body>"
+                "<h1>Setup Sequence</h1>"
+                "<p style='text-align: center;'>" + instruction + "</p>"
+                "<div style='text-align: center;'>"
+                "<a href='" + nextLink + "'><button>" + buttonText + "</button></a>"
+                "</div>"
+                "</body></html>";
+  server->send(200, "text/html", html);
 }
 
 void connectToWiFi() {
@@ -149,7 +190,6 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
   } else {
     Serial.println("Failed to connect to WiFi");
-    // Could add fallback to AP mode here if needed
   }
 }
 
@@ -229,7 +269,11 @@ void handleWeatherPage() {
                 "<form action='/setZip' method='post'>"
                 "New Zip Code: <input type='text' name='zipcode'><br>"
                 "<input type='submit' value='Update'>"
-                "</form></body></html>";
+                "</form>"
+                "<div style='text-align: center; margin-top: 20px;'>"
+                "<a href='/setup?step=0'><button>Setup Sequence</button></a>"
+                "</div>"
+                "</body></html>";
   server->send(200, "text/html", html);
 }
 
