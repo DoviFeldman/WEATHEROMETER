@@ -33,6 +33,7 @@ const int numPoints = 8;
 const String icons[] = {"Sunny", "Partially Cloudy", "Very Cloudy", "Raining", "Thunderstorm", "Snow"};
 const int iconAngles[] = {90, 72, 54, 36, 18, 0};
 
+
 void setup() {
   Serial.begin(115200);
   delay(1000);  // Give Serial time to initialize
@@ -55,8 +56,18 @@ void setup() {
     delay(10);  // Prevent watchdog timeout
   }
 
-  // Connect to Wi-Fi
+  // Connect to Wi-Fi (this shuts off the AP by setting WIFI_STA)
   connectToWiFi();
+
+  // If connected, fetch IP and start new AP with "GoTo-<IP>"
+  if (WiFi.status() == WL_CONNECTED) {
+    String ipStr = WiFi.localIP().toString();
+    String apName = "GoTo-" + ipStr;
+    WiFi.mode(WIFI_AP_STA);  // Enable both station and AP modes
+    WiFi.softAP(apName.c_str());  // Start new AP with IP-based name, no password
+    Serial.println("Started AP: " + apName);
+  }
+
   digitalWrite(ledPin, LOW);  // LED off when connected to home Wi-Fi
 
   // Fetch initial weather data
@@ -72,6 +83,7 @@ void setup() {
   
   Serial.println("Weather server started");
 }
+
 
 void loop() {
   server->handleClient();  // Handle requests from the weather web server
@@ -110,7 +122,7 @@ void startConfigMode() {
                   "<h1>Configure Wi-Fi and Location</h1>"
                   "<form action='/setWiFi' method='post'>"
                   "SSID: <input type='text' name='ssid'><br>"
-                  "Password: <input type='password' name='password'><br>"
+                  "Password: <input type='text' name='password'><br>"
                   "Zip Code: <input type='text' name='zipcode'><br>"
                   "<input type='submit' value='Save'>"
                   "</form>"
