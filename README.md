@@ -11,4 +11,5 @@ The "Grandmas version" has the wifi hardcoded and gets rid of the server complet
 This one is the simplest and has the Wifi and password hardcoded in the Arduino IDE and requires no setup or wifi setup and the 3d print is also completely put together and setup right for use out of the box.
 This version is actually and literally for my Grandma.
 
-
+oh yeah and i still need to match up the servo pointers to the 3d printed icons and temp placement, i totally never did that, also for the Grandmas version.
+i will update when i did that. 
