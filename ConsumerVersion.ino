@@ -85,9 +85,11 @@ void setup() {
     fetchWeatherData();
     moveServos(currentTemp, currentIcon);
 
+     digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi ( moved the LED turn off into the if statement so it only shuts off only if it successfully connects to wifi July 9th) 
+
   }
 
-  digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi
+ 
 
   // Delete the server since we don't need it anymore
   delete server;
