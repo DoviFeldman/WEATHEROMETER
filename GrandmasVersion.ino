@@ -19,7 +19,7 @@ const int ledPin = 2;  // Assuming built-in blue LED is on pin 2
 // Hardcoded Wi-Fi credentials
 const char* ssid = "YOUR_WIFI_NAME";
 const char* password = "YOUR_WIFI_PASSWORD";
-const char* zipCode = "YOUR_ZIP_CODE";
+const String zipCode = "YOUR_ZIP_CODE"; 
 
 
 
@@ -74,9 +74,11 @@ void setup() {
     fetchWeatherData();
     moveServos(currentTemp, currentIcon);
 
+    digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi, i moved it inside the loop unlike the other ones, idk about the other ones, maybe i should look into the consumer version.
+
   }
 
-  digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi
+  
 
   Serial.println("Weatherometer ready");
 }
@@ -110,8 +112,7 @@ void connectToWiFi() {
   }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Connected to WiFi");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    
   } else {
     Serial.println("Failed to connect to WiFi");
   }
@@ -123,7 +124,7 @@ void fetchWeatherData() {
     return;
   }
   HTTPClient http;
-  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + String(zipCode) + "&count=1&format=json";
+  String geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + zipCode + "&count=1&format=json";
   http.begin(geoUrl);
   int httpCode = http.GET();
   if (httpCode != 200) {
