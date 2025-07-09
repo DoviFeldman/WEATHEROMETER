@@ -86,6 +86,9 @@ void setup() {
     WiFi.mode(WIFI_AP_STA);  // Enable both station and AP modes
     WiFi.softAP(apName.c_str());  // Start new AP with IP-based name, no password
     Serial.println("Started AP: " + apName);
+
+
+    digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi (moved to inside the if statement july 9th)
   }
 
   digitalWrite(ledPin, LOW);  // LED off when connected to Wi-Fi
