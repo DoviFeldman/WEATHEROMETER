@@ -32,14 +32,32 @@ static int utc_offset_seconds = 0;     // Offset from UTC in seconds
 static int last_fetch_yday = -1;       // Day of the year of last fetch
 static int last_fetch_year = -1;       // Year of last fetch
 
+// ADDED SEPTEMBER 26!!!! 
+//NOTES!!!!! 
+// 180 is to the left and it is snow and 15 degrees 0 is to the right and its sun and 95 degrees.
+// WERE USING 180 DEGREES CAUSE ITS MY GRANDMAS VERSION, THE OTHER ONES USE LESS.
+// I WANT THE SUN ON THE RIGHT AND THE SNOW ON THE LEFT AND THE HIGH TEMPRATURE ON THE RIGHT AND THE COLD TEMPRATURE ON THE LEFT!!!!
+// BUT THE SERVOS ONLY TURN LIKE 1 DIRECTION WHICH I DONT EXACTLY GET BUT I TESTED A FEW TIMES SO YEAH 0 HAS TO BE ON THE RIGHT AND YOU CANT JUST TURN IT UPSIDE DOWN
+// OK NOW: TEMP HAS 8 NUMBERS AND ICONS HAVE 6 ICONS
+// 180/7 GIVES US 8 NUMBERS IF WE INCLUDE 0(AND 180/8 GIVES US 9 SO WE COULDNT USE THAT) SO THATS WHAT I DID TO GET THEM TO BE EQUALLY SPACED, I TESTED IT AND IT WORKS GREAT AND LOOKS NICE!
+// AND 180 OVER 5 GIVES US 6 NUMBERS IF WE INCLUDE 0 SO THATS WHAT I DID AND IT LOOKS NICE
+// THE 180/7 NUMBERS HAVE TO BE ROUNDED SO HERE ARE THE REAL NUMBERS AND I PUT THE ROUNDED ONES IN THE CODE 180/7 = 0, 25.7 , 51.4 , 77.1 , 102.8 , 128.5 , 154.2 , 179.9  THATS 8 NUMBERS.
+// 180/5 = 0 , 36 , 72 , 108 , 144 , 180 
+// OK PERFECT. 
+
 // Temperature to angle mapping
 const int tempPoints[] = {15, 32, 45, 55, 65, 75, 85, 95};
-const int anglePoints[] = {0, 15, 45, 57, 69, 81, 93, 105};
+//const int anglePoints[] = {0, 15, 45, 57, 69, 81, 93, 105}; // OLD BASE VERSION
+const int anglePoints[] = {180, 154, 128, 103, 77, 51, 26, 0}; //  Working Tested Grandmas Version
 const int numPoints = 8;
 
 // Icon to angle mapping
 const String icons[] = {"Sunny", "Partially Cloudy", "Very Cloudy", "Raining", "Thunderstorm", "Snow"};
-const int iconAngles[] = {90, 72, 54, 36, 18, 0};
+// const int iconAngles[] = {90, 72, 54, 36, 18, 0}; // old base version
+const int iconAngles[] = {0, 36, 72, 108, 144, 180}; // Working Tested Grandmas Version!!!!! ok yes yeah this is good. 
+
+// ok great updated everything and added all the code. tested mostly and it all works and looks well(didnt test this program though yet. 
+
 
 void setup() {
   Serial.begin(115200);
