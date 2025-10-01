@@ -5,6 +5,9 @@
 #include <ArduinoJson.h>
 #include <time.h>  // Added for NTP time functions
 
+// join weatherometer wifi, then go to website 192.168.4.1 
+// thats the website
+
 
 
 //September 30th 2025
