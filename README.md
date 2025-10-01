@@ -2,7 +2,9 @@
 This is an Analog Weatherometer that shows the weather forecast and daily temperature using servo motors.
 
 instructions: Join Weatherometer wifi then 
+
 go to this website address: 
+
 192.168.4.1 
 
 thats the ESP32's IP address website server Weatherometers wifis website
