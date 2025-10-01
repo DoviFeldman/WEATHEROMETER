@@ -5,6 +5,56 @@
 #include <ArduinoJson.h>
 #include <time.h>  // Added for NTP time functions
 
+
+
+//September 30th 2025
+// tested out the correct angles for the icons and temprature numbers
+
+// Numbers on the right icons on the left
+
+// set the sun to 0 degrees, and the snowflake to 120 degrees
+// and set the 95 to 120 degrees and the 15 to 0 degrees
+// IMPORTANT!!!!
+// ot goes 120 degrees matching with the angles on the hexagon, which looks super cool.
+
+//   so the degrees should be:
+
+// 0 SUN
+
+// 24 PARTALLY CLOUDY
+
+// 48 CLOUDY
+
+// 72 RAINY
+
+// 96 THUNDERSTOMY 
+
+// 120 SNOWY
+
+// OK THATS GOOD ENOUGH
+
+// 0 - 15
+
+// 17 - 32 
+
+// 34 -45 
+
+// 51 - 55 
+
+// 68 - 65 
+
+// 85 - 75
+
+// 102 - 85 
+
+// 119  - 95 (120 works the same too, ill just make it 120, it doesnt matter(it mattered in the onshape sketch but not here))
+
+// ok wow perfect!
+
+
+
+  
+//----------------------------------------------------------------------------------------------------------------------------------------------------------
 // THIS IS THE CONSUMER VERSION OF THIS WEATHEROMETER ROBOT. THERE IS NO NEW SECOND SERVER AND NO NEW SECOND WIFI TO TELL YOU THE IP ADDRESS ON THE HOME WIFI.
 // THE PURPOSE OF THAT WAS FOR TESTING TO SEE THE SERVOS MOVE WHEN I CHANGED ZIPCODES, FOR CONSUMERS THERES NO NEED, IT JUST CONNECTS TO THE USERS WIFI AND THATS IT, NO OTHER SERVER OR SECOND WIFI
 // ALL VERSIONS OF THESE WEATHEROMETERS (INCLUDING THE ORIGINAL), EXCEPT THE GRANDMAS VERSION, FORGET THE USERS WIFI AND RESTART FROM SCRATCH WHEN YOU UNPLUG THEM.
@@ -37,12 +87,12 @@ static int last_fetch_year = -1;       // Year of last fetch
 
 // Temperature to angle mapping
 const int tempPoints[] = {15, 32, 45, 55, 65, 75, 85, 95};
-const int anglePoints[] = {0, 15, 45, 57, 69, 81, 93, 105};
+const int anglePoints[] = {0, 17, 34, 51, 68, 85, 102, 120};
 const int numPoints = 8;
 
 // Icon to angle mapping
 const String icons[] = {"Sunny", "Partially Cloudy", "Very Cloudy", "Raining", "Thunderstorm", "Snow"};
-const int iconAngles[] = {90, 72, 54, 36, 18, 0};
+const int iconAngles[] = {0, 24, 48, 72, 96, 120};
 
 void setup() {
   Serial.begin(115200);
