@@ -1,6 +1,12 @@
 # WEATHEROMETER
 This is an Analog Weatherometer that shows the weather forecast and daily temperature using servo motors.
 
+instructions: Join Weatherometer wifi then 
+go to this website address: 
+192.168.4.1 
+
+thats the ESP32's IP address website server Weatherometers wifis website
+
 The "WORKSWeatherometerMay01a.ino" if the offical original file to use, it opens its server again on the users wifi and makes a new second wifi with the name of the IP address of its website on the users home wifi, so that you can check the weather, change the zipcode, and run the setup function again.
 
 The "Consumer version" is the simpler consumer version of that code, same setup function, but after the user connects to his home wifi it shuts off the server website and doesnt turn on another wifi, setup must be done while the users on its wifi or unplug it and restart.
