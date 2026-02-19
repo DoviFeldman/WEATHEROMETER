@@ -21,3 +21,56 @@ This version is actually and literally for my Grandma.
 
 oh yeah and i still need to match up the servo pointers to the 3d printed icons and temp placement, i totally never did that, also for the Grandmas version.
 i will update when i did that. 
+
+
+## Open-Meteo API Weather Codes 
+
+Open-Meteo uses WMO Weather interpretation codes with 28 different weather conditions 
+Here are the main codes:
+
+Clear/Cloudy:
+- 0: Clear sky
+- 1: Mainly clear 
+- 2: Partly cloudy
+- 3: Overcast
+
+Fog:
+- 45: Fog
+- 48: Depositing rime fog
+
+Drizzle:
+- 51: Light drizzle
+- 53: Moderate drizzle
+- 55: Dense drizzle
+- 56: Light freezing drizzle
+- 57: Dense freezing drizzle
+
+Rain:
+- 61: Slight rain
+- 63: Moderate rain
+- 65: Heavy rain
+- 66: Light freezing rain
+- 67: Heavy freezing rain
+
+Snow:
+- 71: Slight snow fall
+- 73: Moderate snow fall
+- 75: Heavy snow fall
+- 77: Snow grains
+
+Showers:
+- 80: Slight rain showers
+- 81: Moderate rain showers
+- 82: Violent rain showers
+- 85: Slight snow showers
+- 86: Heavy snow showers
+
+Thunderstorms:
+- 95: Thunderstorm
+- 96: Thunderstorm with slight hail
+- 99: Thunderstorm with heavy hail
+
+The codes are ordered by severity from 0 (clear sky) to 99 (thunderstorm with hail)
+
+
+
