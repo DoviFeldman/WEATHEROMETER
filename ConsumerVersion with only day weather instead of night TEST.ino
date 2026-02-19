@@ -5,6 +5,8 @@
 #include <ArduinoJson.h>
 #include <time.h>  // Added for NTP time functions
 
+// THIS VERSION WAS CREATED FEB 19 2026. TODAY THE DAY THIS FILE WAS CREATED.
+
 // join weatherometer wifi, then go to website 192.168.4.1 
 // thats the website
 
@@ -88,6 +90,11 @@ static int utc_offset_seconds = 0;     // Offset from UTC in seconds
 static int last_fetch_yday = -1;       // Day of the year of last fetch
 static int last_fetch_year = -1;       // Year of last fetch
 
+  #ifdef ENABLE_SECOND_UPDATE
+  static bool second_update_done = false;
+  #endif
+
+
 // Temperature to angle mapping
 const int tempPoints[] = {15, 32, 45, 55, 65, 75, 85, 95};
 const int anglePoints[] = {0, 17, 34, 51, 68, 85, 102, 120};
@@ -96,6 +103,64 @@ const int numPoints = 8;
 // Icon to angle mapping
 const String icons[] = {"Sunny", "Partially Cloudy", "Very Cloudy", "Raining", "Thunderstorm", "Snow"};
 const int iconAngles[] = {0, 24, 48, 72, 96, 120};
+
+// NEW CODE FROM CLAUDE OPUS 4.6
+
+// =========================== CONFIGURABLE SETTINGS ===========================
+  //
+  // DAYTIME WINDOW: Only weather between these hours is considered.
+  // Uses 24-hour format. 6=6AM, 14=2PM, 22=10PM
+  // To change: edit the numbers. Example: START_HOUR=8 and END_HOUR=18 = 8AM to 6PM
+  const int START_HOUR = 6;    // Start of daytime window (inclusive)
+  const int END_HOUR = 22;     // End of daytime window (inclusive, 22 = 10 PM)
+
+  // SEVERITY WEIGHT: How much "bad weather" hours count vs "nice weather" hours.
+  // This is your "dial" to control how sensitive it is to bad weather:
+  //
+  // 1.0 = pure majority wins, every hour counts the same
+  //       14 sunny hours + 3 rainy hours → SUNNY (14 vs 3)
+  //
+  // 1.5 = bad weather counts 1.5x (RECOMMENDED starting point)
+  //       14 sunny hours + 3 rainy hours (3×1.5=4.5) → SUNNY (14 vs 4.5)
+  //       8 sunny hours + 6 rainy hours (6×1.5=9) → RAINY (8 vs 9)
+  //
+  // 2.0 = bad weather counts double
+  //       12 sunny + 4 rainy (4×2=8) → SUNNY (12 vs 8)
+  //       8 sunny + 5 rainy (5×2=10) → RAINY (8 vs 10)
+  //
+  // 3.0 = bad weather counts triple, pretty cautious
+  //       12 sunny + 4 rainy (4×3=12) → TIE → RAINY (ties go to worse weather)
+  //
+  // 5.0 = even brief bad weather dominates
+  //       14 sunny + 3 rainy (3×5=15) → RAINY (14 vs 15)
+  //
+  // "Bad weather" = Raining, Thunderstorm, Snow (get multiplied)
+  // "Good/neutral" = Sunny, Partially Cloudy, Very Cloudy (always count as 1 per hour)
+  //
+  // START AT 1.5, then raise it if you want more "heads up" about rain,
+  // or lower toward 1.0 if you want it to only show rain when it's raining most of the day.
+  const float SEVERITY_WEIGHT = 1.5;
+
+  // DAILY UPDATE HOUR: When to fetch weather each day (local time, 24h format)
+  // Default: 2 = 2 AM. Change to whatever you want.
+  // To change: just edit the number. Example: 5 = 5 AM
+  const int UPDATE_HOUR = 20;
+
+  // ========================= SECOND DAILY UPDATE (OPTIONAL) =========================
+  // Want a second, more accurate update later in the day? Uncomment these two lines:
+  // #define ENABLE_SECOND_UPDATE
+  // const int SECOND_UPDATE_HOUR = 6;
+  //
+  // How it works: First fetch happens at UPDATE_HOUR (e.g. 2 AM).
+  // Second fetch happens at SECOND_UPDATE_HOUR (e.g. 6 AM) for a more accurate forecast.
+  // SECOND_UPDATE_HOUR must be AFTER UPDATE_HOUR.
+  // To change the second update time, just change the number.
+  // Examples: 6 = 6AM, 8 = 8AM, 12 = noon
+  // =================================================================================
+
+
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -153,20 +218,35 @@ void setup() {
 }
 
 void loop() {
-  
-  // Check time and fetch weather at 2 AM local time
-  time_t now = time(nullptr);
-  time_t local_now = now + utc_offset_seconds;
-  struct tm *local_tm = gmtime(&local_now);  // Interpret as local time due to offset
 
-  if (local_tm->tm_hour >= 2 && 
-      (local_tm->tm_yday != last_fetch_yday || local_tm->tm_year != last_fetch_year)) {
-    fetchWeatherData();
-    moveServos(currentTemp, currentIcon);
-    last_fetch_yday = local_tm->tm_yday;
-    last_fetch_year = local_tm->tm_year;
+    time_t now = time(nullptr);
+    time_t local_now = now + utc_offset_seconds;
+    struct tm *local_tm = gmtime(&local_now);
+
+    // First daily update at UPDATE_HOUR (default 2 AM)
+    if (local_tm->tm_hour >= UPDATE_HOUR &&
+        (local_tm->tm_yday != last_fetch_yday || local_tm->tm_year != last_fetch_year)) {
+      fetchWeatherData();
+      moveServos(currentTemp, currentIcon);
+      last_fetch_yday = local_tm->tm_yday;
+      last_fetch_year = local_tm->tm_year;
+      #ifdef ENABLE_SECOND_UPDATE
+      second_update_done = false;  // Reset for today
+      #endif
+    }
+
+    // Second daily update (only active if you uncommented ENABLE_SECOND_UPDATE above)
+    #ifdef ENABLE_SECOND_UPDATE
+    if (local_tm->tm_hour >= SECOND_UPDATE_HOUR && !second_update_done &&
+        local_tm->tm_yday == last_fetch_yday && local_tm->tm_year == last_fetch_year) {
+      Serial.println("Running second daily update...");
+      fetchWeatherData();
+      moveServos(currentTemp, currentIcon);
+      second_update_done = true;
+    }
+    #endif
   }
-}
+
 
 void startConfigMode() {
   Serial.println("Starting AP mode");
@@ -266,6 +346,53 @@ void connectToWiFi() {
   }
 }
 
+String calculateDominantWeather(JsonArray hourlyWeatherCodes) {
+    // Score each weather category based on how many hours it appears
+    // Bad weather gets multiplied by SEVERITY_WEIGHT
+    float scores[6] = {0, 0, 0, 0, 0, 0};  // Same order as icons[] array
+
+    for (int h = START_HOUR; h <= END_HOUR; h++) {
+      if (h >= (int)hourlyWeatherCodes.size()) break;
+      int code = hourlyWeatherCodes[h];
+      String icon = mapWeatherCodeToIcon(code);
+
+      for (int i = 0; i < 6; i++) {
+        if (icon == icons[i]) {
+          // Indices 3,4,5 = Raining, Thunderstorm, Snow → apply severity weight
+          if (i >= 3) {
+            scores[i] += SEVERITY_WEIGHT;
+          } else {
+            scores[i] += 1.0;
+          }
+          break;
+        }
+      }
+    }
+
+    // Pick highest scoring category. Ties go to the more severe weather (higher index).
+    int bestIndex = 0;
+    float bestScore = scores[0];
+    for (int i = 1; i < 6; i++) {
+      if (scores[i] >= bestScore) {
+        bestScore = scores[i];
+        bestIndex = i;
+      }
+    }
+
+    // Print breakdown to Serial for debugging
+    Serial.println("Daytime weather scores (hours " + String(START_HOUR) + "-" +
+  String(END_HOUR) + "):");
+    for (int i = 0; i < 6; i++) {
+      if (scores[i] > 0) {
+        Serial.println("  " + icons[i] + ": " + String(scores[i]));
+      }
+    }
+    Serial.println("  Result: " + icons[bestIndex]);
+
+    return icons[bestIndex];
+  }
+
+
 void fetchWeatherData() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Wi-Fi not connected, skipping weather fetch");
@@ -292,7 +419,7 @@ void fetchWeatherData() {
   float lat = doc["results"][0]["latitude"];
   float lon = doc["results"][0]["longitude"];
 
-  String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + String(lat, 6) + "&longitude=" + String(lon, 6) + "&daily=temperature_2m_max,weathercode&temperature_unit=fahrenheit&forecast_days=1";
+String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + String(lat, 6) + "&longitude=" + String(lon, 6) + "&daily=temperature_2m_max&hourly=weathercode&temperature_unit=fahrenheit&forecast_days=1";       
   http.begin(weatherUrl);
   httpCode = http.GET();
   if (httpCode != 200) {
@@ -303,18 +430,21 @@ void fetchWeatherData() {
   payload = http.getString();
   http.end();
 
-  deserializeJson(doc, payload);
-  if (!doc["daily"]) {
-    Serial.println("No daily weather data");
+  DynamicJsonDocument weatherDoc(4096);  // Larger buffer needed for hourly data
+  deserializeJson(weatherDoc, payload);
+  if (!weatherDoc["daily"] || !weatherDoc["hourly"]) {
+    Serial.println("No weather data");
     return;
   }
-  float maxTemp = doc["daily"]["temperature_2m_max"][0];
-  int weatherCode = doc["daily"]["weathercode"][0];
+  float maxTemp = weatherDoc["daily"]["temperature_2m_max"][0];
   currentTemp = round(maxTemp);
-  currentIcon = mapWeatherCodeToIcon(weatherCode);
-  
+
+  // Calculate dominant weather from daytime hours only
+  JsonArray hourlyWeatherCodes = weatherDoc["hourly"]["weathercode"].as<JsonArray>();
+  currentIcon = calculateDominantWeather(hourlyWeatherCodes);
+
   // Extract UTC offset for local time calculation
-  utc_offset_seconds = doc["utc_offset_seconds"].as<int>();
+  utc_offset_seconds = weatherDoc["utc_offset_seconds"].as<int>();
 
   Serial.print("Temp: ");
   Serial.print(currentTemp);
