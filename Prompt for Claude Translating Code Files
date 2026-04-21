@@ -1,0 +1,7 @@
+Go through this code file and list every function in the order they appear. 
+For each one, write a short bullet point with the function name in bold, 
+and explain in plain simple english what it actually does — like you're explaining 
+to a non-technical person seeing the device for the first time. 
+No technical terms, no variable names, just what it actually does in real life. 
+Keep each explanation short and readable. 
+If a function has sub-routes or sub-sections that do meaningfully different things, indent them underneath it like a sub-list.
